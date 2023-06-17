@@ -1,0 +1,41 @@
+---
+title: "Using machine learning (random forest) to predict/classify species of beetles"
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE) #defines default echo (display code)
+knitr::opts_chunk$set(eval = TRUE) #defines default eval (display result of code)
+knitr::opts_chunk$set(comment = "") # no space/character before results (e.g. in tables)
+knitr::opts_chunk$set(tidy = T) # let r reformat your code to look tidy in the output
+knitr::opts_chunk$set(collapse = F) # should code and results be shown in the same chunk (=T) or be split in several chunks in the document (=F)
+```
+
+```{r libraries, include=F}
+
+library(tidyverse)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(readxl)
+
+```
+
+```{r load data, include=F}
+# Load the data
+beetle_data <- read_xlsx("morphometrics_v2.xlsx", col_names = T) 
+```
+
+## Data
+Start by looking at the number of samples per species.
+```{r sample sizes}
+table(beetle_data$morphotype)
+```
+
+
+
+
+
