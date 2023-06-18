@@ -1,5 +1,5 @@
 ---
-title: "Using machine learning (random forest) to predict/classify species of beetles"
+title: "Using machine learning to predict/classify species of beetles"
 output: github_document
 editor_options: 
   chunk_output_type: console
@@ -21,21 +21,231 @@ library(dplyr)
 library(randomForest)
 library(ggplot2)
 library(readxl)
+library(mice)
+library(corrr)
+library(ggcorrplot)
+library(caret)
 
 ```
 
 ```{r load data, include=F}
 # Load the data
-beetle_data <- read_xlsx("morphometrics_v2.xlsx", col_names = T) 
+beetle_data <- read_xlsx("morphometrics_v2.xlsx", col_names = T, na = "NA") 
 ```
 
 ## Data
-Start by looking at the number of samples per species.
+Explanation of variables in the data:
+
+* **ID**: ID of the beetle specimen.
+
+* **morphotype**: The species of beetle. All within the genus Hydrobius. This is the outcome I want to predict.
+
+* **15 morphological features**: Includes body size, length and width of the wings and pronotum, and smaller structures on the males. Most measured in mm or μm. Some features are ratios between two lengths. One feature characterizing the shape of a structure (mesoShape) is an angle that is measured in degrees. See publication for details. 
+
+
+Looking at the number of samples per species.
 ```{r sample sizes}
 table(beetle_data$morphotype)
 ```
 
+Next, looking at how much missing data there is per variable:
+```{r missingness}
+# Missing per variables
+naniar::vis_miss(beetle_data)
+
+# Number of specimens with complete data
+table(beetle_data[complete.cases(beetle_data),"morphotype" ])
+```
+
+As seen, there are very few complete cases, primarily do high missingness in variables that were difficult/time-consuming to measure. Not ideal, but can imputation to fill in likely missing values. 
+
+## Split data into train and test set
+Before doing any imputation, need to split the data into train and test data. That way data leakage will be avoided. 
+
+Want to split the data to have 60% train and 40% test data. Using stratified splitting with species as the strata. Note that multiple splits could be done to test the effect of the split, but not done here. Bootstrapping methods for validation are also options later instead of using data-split method. Since the data is highly informative, want to also do a 25% train - 75% test set to really see if possible to get a good model with very little data. 
+```{r data split}
+#set the seed for reproducibility
+set.seed(200)
+
+# Get train index: y is the outcome variable to stratify with, p is the proportion in test
+trainIndex_60_40 <- createDataPartition(beetle_data$morphotype, 
+                                  p = .60, 
+                                  list = FALSE, 
+                                  times = 1)
+
+trainIndex_25_75 <- createDataPartition(beetle_data$morphotype, 
+                                  p = .25, 
+                                  list = FALSE, 
+                                  times = 1)
+
+# Split the data in 2:
+beetle_train_60_40 <- beetle_data[trainIndex_60_40, ]
+beetle_test_60_40 <- beetle_data[-trainIndex_60_40, ]
+
+beetle_train_25_75 <- beetle_data[trainIndex_25_75, ]
+beetle_test_25_75 <- beetle_data[-trainIndex_25_75, ]
+
+```
+
+Check the distribution of species per dataset.
+```{r split sample sizes}
+#Train
+table(beetle_train_60_40$morphotype)
+table(beetle_train_25_75$morphotype)
+
+#Test
+table(beetle_test_60_40$morphotype)
+table(beetle_test_25_75$morphotype)
+
+```
+
+## Imputation of missing data
+In an ideal world I would want to use Multiple Imputation by Chained Equations (MICE) to get reasonable imputed datapoints. However, due to how the data is missing it is impossible to do this in the best. First, MICE assumes linear relationships and no interactions between variables that will be imputed. We likely have both of these here, and even clear interactions between predictors and the outcome/species (i.e. 2-way interaction between outcome x predictor Z on predictor Y). Meaning that the effect of predictor Z on predictor Y will depend on the species. MICE treats the effect as being the same for all, i.e. no interaction, and would severely reduce the correlations between species and predictors. Secondly, key variables have high missing percentages. 
+
+The best option to handle the interactions, is to do the imputation within each species. While this will give good imputations overall, it uses information (the species identity) that would be unknown in real new data. As such, it implies that we would need to make sure to collect key variables for any new individual, as the validation is only valid for individuals with low missingness. Since this is a toy example, accept this limitation and for simplicity, only doing one imputed dataset, although ideally you want to do several. In some cases one variable was entirely co-linear with others and MICE didn't impute those. Instead the mean value of the species was used as the imputation. 
+
+To reduce data leakage, imputation was done on train data, and the train data imputation rules were then used to impute the test data.
+
+CODE BELOW NOT UPDATED!
+```{r mice, eval=FALSE}
+# Set the seed to get the same results next time
+set.seed(101)
+
+# Imputation with the following parameters
+## data[,-1] to exclude the ID in the imputation
+## m = 1 means that only one imputed dataset is used
+## maxit = 25 means that 25 iterations were performed
+
+## Arcticus
+imp_arc <- beetle_data[,-1] %>% filter(morphotype=="arcticus") %>% 
+  mice(data = ., m = 1, maxit = 25)  
+sum(is.na(complete(imp_arc))) # no NA
+arc_df <- complete(imp_arc)
+
+## Fuscipes
+imp_fus <- beetle_data[,-1] %>% filter(morphotype=="fuscipes") %>% 
+  mice(data = ., m = 1, maxit = 25)  
+sum(is.na(complete(imp_fus))) # some NA, all for one variable that was perfectly collinear
+fus_df <- complete(imp_fus)
+fus_df$posSetipunct[is.na(fus_df$posSetipunct)] <- mean(fus_df$posSetipunct,na.rm=T)
+
+## Subrotundus
+imp_sub <- beetle_data[,-1] %>% filter(morphotype=="subrotundus") %>% 
+  mice(data = ., m = 1, maxit = 25)  
+sum(is.na(complete(imp_sub))) # no na
+sub_df <- complete(imp_sub)
+
+## Rottenbergii
+imp_rot <- beetle_data[,-1] %>% filter(morphotype=="rottenbergii") %>% 
+  mice(data = ., m = 1, maxit = 25)  
+sum(is.na(complete(imp_rot))) # some NA, all for one variable that was perfectly collinear
+rot_df <- complete(imp_rot)
+rot_df$posSetipunct[is.na(rot_df$posSetipunct)] <- mean(rot_df$posSetipunct,na.rm=T)
 
 
+# Save the complete data including the imputations as a new dataframe
+beetle_data_imp <- rbind(arc_df,rot_df, fus_df, sub_df)
+```
+
+## Visualize the data with PCA
+Start by getting the matrix with predictors and scaling the variables.
+```{r matrix}
+# Get matrix: exclude morphotype
+beetle_matrix <- beetle_data_imp %>% select(-morphotype)
+
+# Scale the variables
+beetle_matrix_scaled <- beetle_matrix %>% scale(.)
+```
+
+Obtain the correlation matrix and plot this.
+```{r correlation}
+#Obtain correlation metrix
+beetle_matrix_corr <- corrr::cor(beetle_matrix_scaled)
+
+# Plot correlation
+ggcorrplot(beetle_matrix_corr)
+```
+
+Next, calculate the components using the correlation matrix
+```{r PCA}
+#Do PCA
+beetle_pca <- princomp(beetle_matrix_scaled, cor = F)
+
+# Summary of components
+summary(beetle_pca)
+
+# Loadings for the first 2 components
+beetle_pca$loadings[,1:2]
+```
+
+Need 7 components to explain >90% of the variance. First 2 components explain 65% of the variance.
+
+
+Lastly, make the PCA plot.
+```{r PCA plot}
+factoextra::fviz_pca_ind(beetle_pca,
+             col.ind = beetle_data_imp$morphotype, # color by groups
+             geom = "point", # only show points
+             addEllipses = T, 
+             ellipse.type = "norm", # make the convex hull, other options are also possible
+             legend.title = "Species",
+             repel = TRUE
+             )
+
+```
+
+## Train a random forest model
+
+```{r}
+train_ctrl <- trainControl(method="cv", # type of resampling in this case Cross-Validated
+                           number=10, # number of folds
+                           search = "grid", # we are performing a "random search" for tuning
+                           )
+set.seed(301)
+model_rf <- train(morphotype ~ .,
+                       data = beetle_train,
+                       method = "rf", # this will use the randomForest::randomForest function
+                       metric = "Accuracy", # which metric should be optimized for 
+                       trControl = train_ctrl,
+                        tuneLength  = 10,
+                       # options to be passed to randomForest
+                       ntree = 1000,
+                       keep.forest=TRUE,
+                       importance=TRUE) 
+model_rf
+varImpPlot(model_rf$finalModel)
+
+p1 <- predict(model_rf, beetle_train)
+confusionMatrix(p1, factor(beetle_train$morphotype))
+
+plot(model_rf)
+
+p2 <- predict(model_rf, beetle_test)
+confusionMatrix(p2, factor(beetle_test$morphotype))
+
+#OBS: tunelength tunes mtry, but also want to test different ntree (use loop with a fixed mtry)
+# ex: mtry 2, 3, 4, 5 x ntree 50, 100, 500, 1000 (see example )
+
+
+probs <- predict(model_rf, beetle_test, 'prob')
+class <- predict(model_rf, beetle_test, 'raw')
+
+
+TEST.scored <- cbind(beetle_test, probs, class)
+ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=arcticus, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of arcticus") 
+ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=rottenbergii, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of rottenbergii") 
+ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=fuscipes, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of fuscipes") 
+ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=subrotundus, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of subrotundus") 
+
+plot(x=1:nrow(TEST.scored), y=TEST.scored$class)
+ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=class, color=morphotype)) + 
+  geom_point() +labs(color='True species', x="index", y= "Predicted species") + theme_bw()
+
+
+```
 
 
