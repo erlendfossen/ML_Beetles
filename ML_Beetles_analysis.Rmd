@@ -282,7 +282,7 @@ train_ctrl <- trainControl(method="cv", # type of resampling in this case Cross-
                            number=10, # number of folds
                            search = "grid", # we are performing a "grid search" for tuning
                            )
-set.seed(301)
+set.seed(874)
 model_rf_60_40 <- train(morphotype ~ .,
                        data = beetle_data_train_60_40,
                        method = "rf", # this will use the randomForest::randomForest function
@@ -344,4 +344,75 @@ ggplot(TEST_scored_60_40, aes(x=1:nrow(TEST_scored_60_40), y=class_60_40, color=
 
 ```
 
+
+## Train and test a random forest model: 25-75 split
+Next, I will do training and evaluating the 25-75 split. Doing parameter tuning for the number of randomly selected predictors in each split (mtry), while keeping number of trees constant (ntree=1000). Could also tune the number of trees, but seems ok like this for this toy example.
+
+```{r train 25-75}
+# Tuning parameters: using 10-fold cross-validation with a grid search 
+train_ctrl <- trainControl(method="cv", # type of resampling in this case Cross-Validated
+                           number=10, # number of folds
+                           search = "grid", # we are performing a "grid search" for tuning
+                           )
+set.seed(35)
+model_rf_25_75 <- train(morphotype ~ .,
+                       data = beetle_data_train_25_75,
+                       method = "rf", # this will use the randomForest::randomForest function
+                       metric = "Accuracy", # which metric should be optimized for 
+                       trControl = train_ctrl,
+                        tuneLength  = 10, # the number mtry to test, 10 different ones here
+                       # options to be passed to randomForest
+                       ntree = 1000,
+                       keep.forest=TRUE,
+                       importance=TRUE) 
+model_rf_25_75
+plot(model_rf_25_75)
+
+```
+
+Using 2 randomly selected predictors (mtry=2) during tree splits gives best accuracy.
+
+Check variable importance next:
+```{r varimportance train 25_75}
+varImpPlot(model_rf_25_75$finalModel)
+```
+Slightly different from the previous split, but ok. 
+
+Next, how are the performance and confusion matrix for train and test set:
+```{r performance confusionmatrix 25_75}
+#Train data
+p_train <- predict(model_rf_25_75, beetle_data_train_25_75)
+confusionMatrix(p_train, factor(beetle_data_train_25_75$morphotype))
+## 100% accurate on train data
+
+#Test data
+p_test <- predict(model_rf_25_75, beetle_data_test_25_75)
+confusionMatrix(p_test, factor(beetle_data_test_25_75$morphotype))
+## 1 wrong fuscipes, else all correct
+```
+
+Visualize the performance/predictions
+```{r 25_75 plots}
+#Obtain probabilities and predicted classes
+probs_25_75 <- predict(model_rf_25_75, beetle_data_test_25_75, 'prob')
+class_25_75 <- predict(model_rf_25_75, beetle_data_test_25_75, 'raw')
+TEST_scored_25_75 <- cbind(beetle_data_test_25_75, probs_25_75, class_25_75)
+
+# plot of probabilities
+p1 <- ggplot(TEST_scored_25_75, aes(x=1:nrow(TEST_scored_25_75), y=arcticus, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of arcticus") 
+p2 <- ggplot(TEST_scored_25_75, aes(x=1:nrow(TEST_scored_25_75), y=rottenbergii, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of rottenbergii") 
+p3 <- ggplot(TEST_scored_25_75, aes(x=1:nrow(TEST_scored_25_75), y=fuscipes, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of fuscipes") 
+p4<- ggplot(TEST_scored_25_75, aes(x=1:nrow(TEST_scored_25_75), y=subrotundus, color=morphotype)) +
+  geom_point() + labs(color='Species', x="index", y= "Predicted probability of subrotundus") 
+
+ggpubr:::ggarrange(p1,p2,p3,p4,ncol=2, nrow=2)
+
+# Plot classes
+ggplot(TEST_scored_25_75, aes(x=1:nrow(TEST_scored_25_75), y=class_25_75, color=morphotype)) + 
+  geom_point() +labs(color='True species', x="index", y= "Predicted species") + theme_bw()
+
+```
 

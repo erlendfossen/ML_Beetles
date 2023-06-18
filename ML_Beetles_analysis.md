@@ -466,7 +466,7 @@ train_ctrl <- trainControl(method="cv", # type of resampling in this case Cross-
                            number=10, # number of folds
                            search = "grid", # we are performing a "grid search" for tuning
                            )
-set.seed(301)
+set.seed(874)
 model_rf_60_40 <- train(morphotype ~ .,
                        data = beetle_data_train_60_40,
                        method = "rf", # this will use the randomForest::randomForest function
@@ -488,20 +488,20 @@ model_rf_60_40
 
     No pre-processing
     Resampling: Cross-Validated (10 fold) 
-    Summary of sample sizes: 69, 70, 68, 67, 67, 68, ... 
+    Summary of sample sizes: 69, 66, 68, 69, 69, 68, ... 
     Resampling results across tuning parameters:
 
       mtry  Accuracy   Kappa    
        2    1.0000000  1.0000000
-       3    0.9875000  0.9833333
+       3    1.0000000  1.0000000
        4    1.0000000  1.0000000
-       6    0.9888889  0.9852459
-       7    0.9888889  0.9852459
-       9    0.9888889  0.9852459
-      10    0.9888889  0.9852459
-      12    0.9888889  0.9852459
-      13    0.9763889  0.9685792
-      15    0.9888889  0.9852459
+       6    0.9857143  0.9805556
+       7    0.9857143  0.9805556
+       9    0.9857143  0.9805556
+      10    0.9857143  0.9805556
+      12    0.9857143  0.9805556
+      13    0.9857143  0.9805556
+      15    0.9857143  0.9805556
 
     Accuracy was used to select the optimal model using the largest value.
     The final value used for the model was mtry = 2.
@@ -658,3 +658,209 @@ ggplot(TEST_scored_60_40, aes(x = 1:nrow(TEST_scored_60_40), y = class_60_40, co
 ```
 
 ![](ML_Beetles_analysis_files/figure-gfm/60_40%20plots-2.png)<!-- -->
+
+## Train and test a random forest model: 25-75 split
+
+Next, I will do training and evaluating the 25-75 split. Doing parameter
+tuning for the number of randomly selected predictors in each split
+(mtry), while keeping number of trees constant (ntree=1000). Could also
+tune the number of trees, but seems ok like this for this toy example.
+
+``` r
+# Tuning parameters: using 10-fold cross-validation with a grid search 
+train_ctrl <- trainControl(method="cv", # type of resampling in this case Cross-Validated
+                           number=10, # number of folds
+                           search = "grid", # we are performing a "grid search" for tuning
+                           )
+set.seed(35)
+model_rf_25_75 <- train(morphotype ~ .,
+                       data = beetle_data_train_25_75,
+                       method = "rf", # this will use the randomForest::randomForest function
+                       metric = "Accuracy", # which metric should be optimized for 
+                       trControl = train_ctrl,
+                        tuneLength  = 10, # the number mtry to test, 10 different ones here
+                       # options to be passed to randomForest
+                       ntree = 1000,
+                       keep.forest=TRUE,
+                       importance=TRUE) 
+model_rf_25_75
+```
+
+    Random Forest 
+
+    32 samples
+    15 predictors
+     4 classes: 'arcticus', 'fuscipes', 'rottenbergii', 'subrotundus' 
+
+    No pre-processing
+    Resampling: Cross-Validated (10 fold) 
+    Summary of sample sizes: 29, 30, 30, 28, 28, 28, ... 
+    Resampling results across tuning parameters:
+
+      mtry  Accuracy  Kappa    
+       2    0.975     0.9666667
+       3    0.975     0.9666667
+       4    0.975     0.9666667
+       6    0.975     0.9666667
+       7    0.975     0.9666667
+       9    0.975     0.9666667
+      10    0.975     0.9666667
+      12    0.975     0.9666667
+      13    0.975     0.9666667
+      15    0.975     0.9666667
+
+    Accuracy was used to select the optimal model using the largest value.
+    The final value used for the model was mtry = 2.
+
+``` r
+plot(model_rf_25_75)
+```
+
+![](ML_Beetles_analysis_files/figure-gfm/train%2025-75-1.png)<!-- -->
+
+Using 2 randomly selected predictors (mtry=2) during tree splits gives
+best accuracy.
+
+Check variable importance next:
+
+``` r
+varImpPlot(model_rf_25_75$finalModel)
+```
+
+![](ML_Beetles_analysis_files/figure-gfm/varimportance%20train%2025_75-1.png)<!-- -->
+Slightly different from the previous split, but ok.
+
+Next, how are the performance and confusion matrix for train and test
+set:
+
+``` r
+# Train data
+p_train <- predict(model_rf_25_75, beetle_data_train_25_75)
+confusionMatrix(p_train, factor(beetle_data_train_25_75$morphotype))
+```
+
+    Confusion Matrix and Statistics
+
+                  Reference
+    Prediction     arcticus fuscipes rottenbergii subrotundus
+      arcticus            6        0            0           0
+      fuscipes            0       10            0           0
+      rottenbergii        0        0            7           0
+      subrotundus         0        0            0           9
+
+    Overall Statistics
+                                         
+                   Accuracy : 1          
+                     95% CI : (0.8911, 1)
+        No Information Rate : 0.3125     
+        P-Value [Acc > NIR] : < 2.2e-16  
+                                         
+                      Kappa : 1          
+                                         
+     Mcnemar's Test P-Value : NA         
+
+    Statistics by Class:
+
+                         Class: arcticus Class: fuscipes Class: rottenbergii
+    Sensitivity                   1.0000          1.0000              1.0000
+    Specificity                   1.0000          1.0000              1.0000
+    Pos Pred Value                1.0000          1.0000              1.0000
+    Neg Pred Value                1.0000          1.0000              1.0000
+    Prevalence                    0.1875          0.3125              0.2188
+    Detection Rate                0.1875          0.3125              0.2188
+    Detection Prevalence          0.1875          0.3125              0.2188
+    Balanced Accuracy             1.0000          1.0000              1.0000
+                         Class: subrotundus
+    Sensitivity                      1.0000
+    Specificity                      1.0000
+    Pos Pred Value                   1.0000
+    Neg Pred Value                   1.0000
+    Prevalence                       0.2812
+    Detection Rate                   0.2812
+    Detection Prevalence             0.2812
+    Balanced Accuracy                1.0000
+
+``` r
+## 100% accurate on train data
+
+# Test data
+p_test <- predict(model_rf_25_75, beetle_data_test_25_75)
+confusionMatrix(p_test, factor(beetle_data_test_25_75$morphotype))
+```
+
+    Confusion Matrix and Statistics
+
+                  Reference
+    Prediction     arcticus fuscipes rottenbergii subrotundus
+      arcticus           16        0            0           0
+      fuscipes            0       28            0           0
+      rottenbergii        0        0           20           0
+      subrotundus         0        1            0          26
+
+    Overall Statistics
+                                              
+                   Accuracy : 0.989           
+                     95% CI : (0.9403, 0.9997)
+        No Information Rate : 0.3187          
+        P-Value [Acc > NIR] : < 2.2e-16       
+                                              
+                      Kappa : 0.9851          
+                                              
+     Mcnemar's Test P-Value : NA              
+
+    Statistics by Class:
+
+                         Class: arcticus Class: fuscipes Class: rottenbergii
+    Sensitivity                   1.0000          0.9655              1.0000
+    Specificity                   1.0000          1.0000              1.0000
+    Pos Pred Value                1.0000          1.0000              1.0000
+    Neg Pred Value                1.0000          0.9841              1.0000
+    Prevalence                    0.1758          0.3187              0.2198
+    Detection Rate                0.1758          0.3077              0.2198
+    Detection Prevalence          0.1758          0.3077              0.2198
+    Balanced Accuracy             1.0000          0.9828              1.0000
+                         Class: subrotundus
+    Sensitivity                      1.0000
+    Specificity                      0.9846
+    Pos Pred Value                   0.9630
+    Neg Pred Value                   1.0000
+    Prevalence                       0.2857
+    Detection Rate                   0.2857
+    Detection Prevalence             0.2967
+    Balanced Accuracy                0.9923
+
+``` r
+## 1 wrong fuscipes, else all correct
+```
+
+Visualize the performance/predictions
+
+``` r
+# Obtain probabilities and predicted classes
+probs_25_75 <- predict(model_rf_25_75, beetle_data_test_25_75, "prob")
+class_25_75 <- predict(model_rf_25_75, beetle_data_test_25_75, "raw")
+TEST_scored_25_75 <- cbind(beetle_data_test_25_75, probs_25_75, class_25_75)
+
+# plot of probabilities
+p1 <- ggplot(TEST_scored_25_75, aes(x = 1:nrow(TEST_scored_25_75), y = arcticus,
+    color = morphotype)) + geom_point() + labs(color = "Species", x = "index", y = "Predicted probability of arcticus")
+p2 <- ggplot(TEST_scored_25_75, aes(x = 1:nrow(TEST_scored_25_75), y = rottenbergii,
+    color = morphotype)) + geom_point() + labs(color = "Species", x = "index", y = "Predicted probability of rottenbergii")
+p3 <- ggplot(TEST_scored_25_75, aes(x = 1:nrow(TEST_scored_25_75), y = fuscipes,
+    color = morphotype)) + geom_point() + labs(color = "Species", x = "index", y = "Predicted probability of fuscipes")
+p4 <- ggplot(TEST_scored_25_75, aes(x = 1:nrow(TEST_scored_25_75), y = subrotundus,
+    color = morphotype)) + geom_point() + labs(color = "Species", x = "index", y = "Predicted probability of subrotundus")
+
+ggpubr:::ggarrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+```
+
+![](ML_Beetles_analysis_files/figure-gfm/25_75%20plots-1.png)<!-- -->
+
+``` r
+# Plot classes
+ggplot(TEST_scored_25_75, aes(x = 1:nrow(TEST_scored_25_75), y = class_25_75, color = morphotype)) +
+    geom_point() + labs(color = "True species", x = "index", y = "Predicted species") +
+    theme_bw()
+```
+
+![](ML_Beetles_analysis_files/figure-gfm/25_75%20plots-2.png)<!-- -->
