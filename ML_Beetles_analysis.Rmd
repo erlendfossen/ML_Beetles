@@ -100,91 +100,170 @@ table(beetle_test_25_75$morphotype)
 ```
 
 ## Imputation of missing data
-In an ideal world I would want to use Multiple Imputation by Chained Equations (MICE) to get reasonable imputed datapoints. However, due to how the data is missing it is impossible to do this in the best. First, MICE assumes linear relationships and no interactions between variables that will be imputed. We likely have both of these here, and even clear interactions between predictors and the outcome/species (i.e. 2-way interaction between outcome x predictor Z on predictor Y). Meaning that the effect of predictor Z on predictor Y will depend on the species. MICE treats the effect as being the same for all, i.e. no interaction, and would severely reduce the correlations between species and predictors. Secondly, key variables have high missing percentages. 
+In an ideal world I would want to use Multiple Imputation by Chained Equations (MICE) to get reasonable imputed datapoints. However, due to how the data is missing it is not possible to do this perfectly. First, MICE assumes linear relationships and no interactions between variables that will be imputed. We likely have both of these here, and even clear interactions between predictors and the outcome/species (i.e. 2-way interaction between (outcome x predictor Z) on predictor Y). Meaning that the effect of predictor Z on predictor Y will depend on the species. MICE treats the effect as being the same for all, i.e. no interaction, and would severely reduce the correlations between species and predictors. Secondly, key variables have high missing percentages. 
 
 The best option to handle the interactions, is to do the imputation within each species. While this will give good imputations overall, it uses information (the species identity) that would be unknown in real new data. As such, it implies that we would need to make sure to collect key variables for any new individual, as the validation is only valid for individuals with low missingness. Since this is a toy example, accept this limitation and for simplicity, only doing one imputed dataset, although ideally you want to do several. In some cases one variable was entirely co-linear with others and MICE didn't impute those. Instead the mean value of the species was used as the imputation. 
 
-To reduce data leakage, imputation was done on train data, and the train data imputation rules were then used to impute the test data.
-
-CODE BELOW NOT UPDATED!
-```{r mice, eval=FALSE}
-# Set the seed to get the same results next time
-set.seed(101)
-
+To reduce data leakage, imputation was done on train data, and the train data imputation rules were then used to impute the test data. 
+```{r mice, results='hide'}
 # Imputation with the following parameters
 ## data[,-1] to exclude the ID in the imputation
 ## m = 1 means that only one imputed dataset is used
 ## maxit = 25 means that 25 iterations were performed
+## ignore = a vector with FALSE for train data and TRUE for test data. If true, data is imputed but not used to find the imputation rules. If false, data is used for finding the rule and is imputed.
+
+## Combine train and test data for downstream imputation
+beetle_df_combined_60_40 <- rbind( 
+  beetle_train_60_40 %>% mutate(data_type = "train"),
+  beetle_test_60_40%>% mutate(data_type = "test")
+  ) #combine data into one df
+
+beetle_df_combined_25_75 <- rbind( 
+  beetle_train_25_75 %>% mutate(data_type = "train"),
+  beetle_test_25_75 %>% mutate(data_type = "test")
+  ) #combine data into one df
 
 ## Arcticus
-imp_arc <- beetle_data[,-1] %>% filter(morphotype=="arcticus") %>% 
-  mice(data = ., m = 1, maxit = 25)  
-sum(is.na(complete(imp_arc))) # no NA
-arc_df <- complete(imp_arc)
+arc_df_combined_60_40 <- beetle_df_combined_60_40[,-1] %>% filter(morphotype=="arcticus")
+imp_arc_60_40 <- mice(data = arc_df_combined_60_40, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(arc_df_combined_60_40$data_type=="train")), 
+                               rep(TRUE, sum(arc_df_combined_60_40$data_type=="test"))))  # run imputation
+arc_df_60_40 <- complete(imp_arc_60_40) # store imputed values
+sum(is.na(arc_df_60_40)) # no NAs
+
+arc_df_combined_25_75 <- beetle_df_combined_25_75[,-1] %>% filter(morphotype=="arcticus")
+imp_arc_25_75 <- mice(data = arc_df_combined_25_75, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(arc_df_combined_25_75$data_type=="train")), 
+                               rep(TRUE, sum(arc_df_combined_25_75$data_type=="test"))))  # run imputation
+arc_df_25_75 <- complete(imp_arc_25_75) # store imputed values
+sum(is.na(arc_df_25_75)) # no NAs
+
 
 ## Fuscipes
-imp_fus <- beetle_data[,-1] %>% filter(morphotype=="fuscipes") %>% 
-  mice(data = ., m = 1, maxit = 25)  
-sum(is.na(complete(imp_fus))) # some NA, all for one variable that was perfectly collinear
-fus_df <- complete(imp_fus)
-fus_df$posSetipunct[is.na(fus_df$posSetipunct)] <- mean(fus_df$posSetipunct,na.rm=T)
+fus_df_combined_60_40 <- beetle_df_combined_60_40[,-1] %>% filter(morphotype=="fuscipes")
+imp_fus_60_40 <- mice(data = fus_df_combined_60_40, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(fus_df_combined_60_40$data_type=="train")), 
+                               rep(TRUE, sum(fus_df_combined_60_40$data_type=="test"))))  # run imputation
+fus_df_60_40 <- complete(imp_fus_60_40) # store imputed values
+sum(is.na(fus_df_60_40)) # 26 NA in posSetipunct
+fus_df_60_40$posSetipunct[is.na(fus_df_60_40$posSetipunct)] <- 
+  mean(fus_df_60_40$posSetipunct[fus_df_60_40$data_type=="train"],na.rm=T) # replace NA with mean of TRAIN data
+
+fus_df_combined_25_75 <- beetle_df_combined_25_75[,-1] %>% filter(morphotype=="fuscipes")
+imp_fus_25_75 <- mice(data = fus_df_combined_25_75, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(fus_df_combined_25_75$data_type=="train")), 
+                               rep(TRUE, sum(fus_df_combined_25_75$data_type=="test"))))  # run imputation
+fus_df_25_75 <- complete(imp_fus_25_75) # store imputed values
+sum(is.na(fus_df_25_75)) # 26 NA in posSetipunct
+fus_df_25_75$posSetipunct[is.na(fus_df_25_75$posSetipunct)] <- 
+  mean(fus_df_25_75$posSetipunct[fus_df_25_75$data_type=="train"],na.rm=T) # replace NA with mean of TRAIN data
 
 ## Subrotundus
-imp_sub <- beetle_data[,-1] %>% filter(morphotype=="subrotundus") %>% 
-  mice(data = ., m = 1, maxit = 25)  
-sum(is.na(complete(imp_sub))) # no na
-sub_df <- complete(imp_sub)
+sub_df_combined_60_40 <- beetle_df_combined_60_40[,-1] %>% filter(morphotype=="subrotundus")
+imp_sub_60_40 <- mice(data = sub_df_combined_60_40, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(sub_df_combined_60_40$data_type=="train")), 
+                               rep(TRUE, sum(sub_df_combined_60_40$data_type=="test"))))  # run imputation
+sub_df_60_40 <- complete(imp_sub_60_40) # store imputed values
+sum(is.na(sub_df_60_40)) # no NAs
+
+sub_df_combined_25_75 <- beetle_df_combined_25_75[,-1] %>% filter(morphotype=="subrotundus")
+#imp_sub_25_75 <- mice(data = sub_df_combined_25_75, m = 1, maxit = 25, seed=101, 
+#                      ignore=c(rep(FALSE, sum(sub_df_combined_25_75$data_type=="train")), 
+#                               rep(TRUE, sum(sub_df_combined_25_75$data_type=="test"))))  # run imputation
+## This failed due to too small N in train data. Instead, impute mean of train data everywhere
+sub_train_means <- lapply(sub_df_combined_25_75[sub_df_combined_25_75$data_type=="train",], FUN = mean, na.rm=T)
+for(i in unique(colnames(sub_df_combined_25_75))){
+  sub_df_combined_25_75[[i]][is.na(sub_df_combined_25_75[[i]])] <- sub_train_means[[i]]
+}
+sum(is.na(sub_df_combined_25_75)) # no NAs
+sub_df_25_75 <- sub_df_combined_25_75
 
 ## Rottenbergii
-imp_rot <- beetle_data[,-1] %>% filter(morphotype=="rottenbergii") %>% 
-  mice(data = ., m = 1, maxit = 25)  
-sum(is.na(complete(imp_rot))) # some NA, all for one variable that was perfectly collinear
-rot_df <- complete(imp_rot)
-rot_df$posSetipunct[is.na(rot_df$posSetipunct)] <- mean(rot_df$posSetipunct,na.rm=T)
+rot_df_combined_60_40 <- beetle_df_combined_60_40[,-1] %>% filter(morphotype=="rottenbergii")
+imp_rot_60_40 <- mice(data = rot_df_combined_60_40, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(rot_df_combined_60_40$data_type=="train")), 
+                               rep(TRUE, sum(rot_df_combined_60_40$data_type=="test"))))  # run imputation
+rot_df_60_40 <- complete(imp_rot_60_40) # store imputed values
+sum(is.na(rot_df_60_40)) # 19 NA in posSetipunct
+rot_df_60_40$posSetipunct[is.na(rot_df_60_40$posSetipunct)] <- 
+  mean(rot_df_60_40$posSetipunct[rot_df_60_40$data_type=="train"],na.rm=T) # replace NA with mean of TRAIN data
 
+rot_df_combined_25_75 <- beetle_df_combined_25_75[,-1] %>% filter(morphotype=="rottenbergii")
+imp_rot_25_75 <- mice(data = rot_df_combined_25_75, m = 1, maxit = 25, seed=101, 
+                      ignore=c(rep(FALSE, sum(rot_df_combined_25_75$data_type=="train")), 
+                               rep(TRUE, sum(rot_df_combined_25_75$data_type=="test"))))  # run imputation
+rot_df_25_75 <- complete(imp_rot_25_75) # store imputed values
+sum(is.na(rot_df_25_75)) # 26 NA in posSetipunct
+rot_df_25_75$posSetipunct[is.na(rot_df_25_75$posSetipunct)] <- 
+  mean(rot_df_25_75$posSetipunct[rot_df_25_75$data_type=="train"],na.rm=T) # replace NA with mean of TRAIN data
 
-# Save the complete data including the imputations as a new dataframe
-beetle_data_imp <- rbind(arc_df,rot_df, fus_df, sub_df)
+# Save the complete data including the imputations as a new dataframes
+beetle_data_imp_60_40 <- rbind(arc_df_60_40,rot_df_60_40, fus_df_60_40, sub_df_60_40) #complete data 60_40 split
+beetle_data_imp_25_75 <- rbind(arc_df_25_75,rot_df_25_75, fus_df_25_75, sub_df_25_75) #complete data 25_75 split
+
+beetle_data_train_60_40 <- beetle_data_imp_60_40 %>% filter(data_type=="train") %>% select(-c(data_type))
+beetle_data_train_25_75 <- beetle_data_imp_25_75 %>% filter(data_type=="train") %>% select(-c(data_type))
+
+beetle_data_test_60_40 <- beetle_data_imp_60_40 %>% filter(data_type=="test") %>% select(-c(data_type))
+beetle_data_test_25_75 <- beetle_data_imp_25_75 %>% filter(data_type=="test") %>% select(-c(data_type))
+
 ```
 
 ## Visualize the data with PCA
 Start by getting the matrix with predictors and scaling the variables.
 ```{r matrix}
-# Get matrix: exclude morphotype
-beetle_matrix <- beetle_data_imp %>% select(-morphotype)
+# Obtain matrix with only numeric values, no morphotype of data_Type
+beetle_matrix_60_40 <- beetle_data_imp_60_40 %>% select(-c(morphotype, data_type))
+beetle_matrix_25_75 <- beetle_data_imp_25_75 %>% select(-c(morphotype, data_type))
 
 # Scale the variables
-beetle_matrix_scaled <- beetle_matrix %>% scale(.)
+beetle_matrix_scaled_60_40 <- beetle_matrix_60_40 %>% scale(.)
+beetle_matrix_scaled_25_75 <- beetle_matrix_25_75 %>% scale(.)
+
 ```
 
 Obtain the correlation matrix and plot this.
 ```{r correlation}
 #Obtain correlation metrix
-beetle_matrix_corr <- corrr::cor(beetle_matrix_scaled)
+beetle_matrix_corr_60_40 <- cor(beetle_matrix_scaled_60_40)
+beetle_matrix_corr_25_75 <- cor(beetle_matrix_scaled_25_75)
 
 # Plot correlation
-ggcorrplot(beetle_matrix_corr)
+ggcorrplot(beetle_matrix_corr_60_40)
+ggcorrplot(beetle_matrix_corr_25_75)
+
 ```
 
 Next, calculate the components using the correlation matrix
 ```{r PCA}
 #Do PCA
-beetle_pca <- princomp(beetle_matrix_scaled, cor = F)
+beetle_pca_60_40 <- princomp(beetle_matrix_scaled_60_40, cor = F)
+beetle_pca_25_75 <- princomp(beetle_matrix_scaled_25_75, cor = F)
 
 # Summary of components
-summary(beetle_pca)
+summary(beetle_pca_60_40)
+summary(beetle_pca_25_75)
 
 # Loadings for the first 2 components
-beetle_pca$loadings[,1:2]
+beetle_pca_60_40$loadings[,1:2]
 ```
 
-Need 7 components to explain >90% of the variance. First 2 components explain 65% of the variance.
+Need 7 components to explain >90% of the variance. First 2 components explain 64% of the variance.
 
 
 Lastly, make the PCA plot.
 ```{r PCA plot}
-factoextra::fviz_pca_ind(beetle_pca,
-             col.ind = beetle_data_imp$morphotype, # color by groups
+factoextra::fviz_pca_ind(beetle_pca_60_40,
+             col.ind = beetle_data_imp_60_40$morphotype, # color by groups
+             geom = "point", # only show points
+             addEllipses = T, 
+             ellipse.type = "norm", # make the convex hull, other options are also possible
+             legend.title = "Species",
+             repel = TRUE
+             )
+
+factoextra::fviz_pca_ind(beetle_pca_25_75,
+             col.ind = beetle_data_imp_25_75$morphotype, # color by groups
              geom = "point", # only show points
              addEllipses = T, 
              ellipse.type = "norm", # make the convex hull, other options are also possible
@@ -194,57 +273,74 @@ factoextra::fviz_pca_ind(beetle_pca,
 
 ```
 
-## Train a random forest model
+## Train and test a random forest model: 60-40 split
+Start by training and evaluating the 60-40 split. Doing parameter tuning for the number of randomly selected predictors in each split (mtry), while keeping number of trees constant (ntree=1000). Could also tune the number of trees, but seems ok like this for this toy example.
 
-```{r}
+```{r train 60-40}
+# Tuning parameters: using 10-fold cross-validation with a grid search 
 train_ctrl <- trainControl(method="cv", # type of resampling in this case Cross-Validated
                            number=10, # number of folds
-                           search = "grid", # we are performing a "random search" for tuning
+                           search = "grid", # we are performing a "grid search" for tuning
                            )
 set.seed(301)
-model_rf <- train(morphotype ~ .,
-                       data = beetle_train,
+model_rf_60_40 <- train(morphotype ~ .,
+                       data = beetle_data_train_60_40,
                        method = "rf", # this will use the randomForest::randomForest function
                        metric = "Accuracy", # which metric should be optimized for 
                        trControl = train_ctrl,
-                        tuneLength  = 10,
+                        tuneLength  = 10, # the number mtry to test, 10 different ones here
                        # options to be passed to randomForest
                        ntree = 1000,
                        keep.forest=TRUE,
                        importance=TRUE) 
-model_rf
-varImpPlot(model_rf$finalModel)
+model_rf_60_40
+plot(model_rf_60_40)
 
-p1 <- predict(model_rf, beetle_train)
-confusionMatrix(p1, factor(beetle_train$morphotype))
+```
 
-plot(model_rf)
+Using 2 randomly selected predictors (mtry=2) during tree splits gives best accuracy.
 
-p2 <- predict(model_rf, beetle_test)
-confusionMatrix(p2, factor(beetle_test$morphotype))
+Check variable importance next:
+```{r varimportance train 60_40}
+varImpPlot(model_rf_60_40$finalModel)
+```
+Nothing too surprising here.
 
-#OBS: tunelength tunes mtry, but also want to test different ntree (use loop with a fixed mtry)
-# ex: mtry 2, 3, 4, 5 x ntree 50, 100, 500, 1000 (see example )
+Next, how are the performance and confusion matrix for train and test set:
+```{r performance confusionmatrix 60_40}
+#Train data
+p_train <- predict(model_rf_60_40, beetle_data_train_60_40)
+confusionMatrix(p_train, factor(beetle_data_train_60_40$morphotype))
+## 100% accurate on train data
 
+#Test data
+p_test <- predict(model_rf_60_40, beetle_data_test_60_40)
+confusionMatrix(p_test, factor(beetle_data_test_60_40$morphotype))
+## 1 wrong subrotundus, else all correct
+```
 
-probs <- predict(model_rf, beetle_test, 'prob')
-class <- predict(model_rf, beetle_test, 'raw')
+Visualize the performance/predictions
+```{r 60_40 plots}
+#Obtain probabilities and predicted classes
+probs_60_40 <- predict(model_rf_60_40, beetle_data_test_60_40, 'prob')
+class_60_40 <- predict(model_rf_60_40, beetle_data_test_60_40, 'raw')
+TEST_scored_60_40 <- cbind(beetle_data_test_60_40, probs_60_40, class_60_40)
 
-
-TEST.scored <- cbind(beetle_test, probs, class)
-ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=arcticus, color=morphotype)) +
+# plot of probabilities
+p1 <- ggplot(TEST_scored_60_40, aes(x=1:nrow(TEST_scored_60_40), y=arcticus, color=morphotype)) +
   geom_point() + labs(color='Species', x="index", y= "Predicted probability of arcticus") 
-ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=rottenbergii, color=morphotype)) +
+p2 <- ggplot(TEST_scored_60_40, aes(x=1:nrow(TEST_scored_60_40), y=rottenbergii, color=morphotype)) +
   geom_point() + labs(color='Species', x="index", y= "Predicted probability of rottenbergii") 
-ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=fuscipes, color=morphotype)) +
+p3 <- ggplot(TEST_scored_60_40, aes(x=1:nrow(TEST_scored_60_40), y=fuscipes, color=morphotype)) +
   geom_point() + labs(color='Species', x="index", y= "Predicted probability of fuscipes") 
-ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=subrotundus, color=morphotype)) +
+p4<- ggplot(TEST_scored_60_40, aes(x=1:nrow(TEST_scored_60_40), y=subrotundus, color=morphotype)) +
   geom_point() + labs(color='Species', x="index", y= "Predicted probability of subrotundus") 
 
-plot(x=1:nrow(TEST.scored), y=TEST.scored$class)
-ggplot(TEST.scored, aes(x=1:nrow(TEST.scored), y=class, color=morphotype)) + 
-  geom_point() +labs(color='True species', x="index", y= "Predicted species") + theme_bw()
+ggpubr:::ggarrange(p1,p2,p3,p4,ncol=2, nrow=2)
 
+# Plot classes
+ggplot(TEST_scored_60_40, aes(x=1:nrow(TEST_scored_60_40), y=class_60_40, color=morphotype)) + 
+  geom_point() +labs(color='True species', x="index", y= "Predicted species") + theme_bw()
 
 ```
 
