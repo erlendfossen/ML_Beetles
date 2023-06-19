@@ -457,8 +457,10 @@ factoextra::fviz_pca_ind(beetle_pca_25_75,
 
 Start by training and evaluating the 60-40 split. Doing parameter tuning
 for the number of randomly selected predictors in each split (mtry),
-while keeping number of trees constant (ntree=1000). Could also tune the
-number of trees, but seems ok like this for this toy example.
+while keeping number of trees constant (ntree=1000). Nodesize= 1
+(i.e. need at least one individual in each split). maxnode not set,
+meaning the tree can grow to max size. Could also tune the number of
+trees, but seems ok like this for this toy example.
 
 ``` r
 # Tuning parameters: using 10-fold cross-validation with a grid search 
@@ -475,6 +477,7 @@ model_rf_60_40 <- train(morphotype ~ .,
                         tuneLength  = 10, # the number mtry to test, 10 different ones here
                        # options to be passed to randomForest
                        ntree = 1000,
+                       nodesize=1,
                        keep.forest=TRUE,
                        importance=TRUE) 
 model_rf_60_40
@@ -663,8 +666,10 @@ ggplot(TEST_scored_60_40, aes(x = 1:nrow(TEST_scored_60_40), y = class_60_40, co
 
 Next, I will do training and evaluating the 25-75 split. Doing parameter
 tuning for the number of randomly selected predictors in each split
-(mtry), while keeping number of trees constant (ntree=1000). Could also
-tune the number of trees, but seems ok like this for this toy example.
+(mtry), while keeping number of trees constant (ntree=1000). Nodesize= 1
+(i.e. need at least one individual in each split). maxnode not set,
+meaning the tree can grow to max size. Could also tune the number of
+trees, but seems ok like this for this toy example.
 
 ``` r
 # Tuning parameters: using 10-fold cross-validation with a grid search 
@@ -681,6 +686,7 @@ model_rf_25_75 <- train(morphotype ~ .,
                         tuneLength  = 10, # the number mtry to test, 10 different ones here
                        # options to be passed to randomForest
                        ntree = 1000,
+                       nodesize=1,
                        keep.forest=TRUE,
                        importance=TRUE) 
 model_rf_25_75
@@ -830,7 +836,7 @@ confusionMatrix(p_test, factor(beetle_data_test_25_75$morphotype))
     Balanced Accuracy                0.9923
 
 ``` r
-## 1 wrong fuscipes, else all correct
+## 3 wrong, else all correct
 ```
 
 Visualize the performance/predictions
