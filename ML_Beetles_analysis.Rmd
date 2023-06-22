@@ -67,7 +67,7 @@ Want to split the data to have 60% train and 40% test data. Using stratified spl
 #set the seed for reproducibility
 set.seed(200)
 
-# Get train index: y is the outcome variable to stratify with, p is the proportion in test
+# Get train index: y is the outcome variable to stratify with, p is the proportion in train
 trainIndex_60_40 <- createDataPartition(beetle_data$morphotype, 
                                   p = .60, 
                                   list = FALSE, 
@@ -104,8 +104,8 @@ In an ideal world I would want to use Multiple Imputation by Chained Equations (
 
 The best option to handle the interactions, is to do the imputation within each species. While this will give good imputations overall, it uses information (the species identity) that would be unknown in real new data. As such, it implies that we would need to make sure to collect key variables for any new individual, as the validation is only valid for individuals with low missingness. Since this is a toy example, accept this limitation and for simplicity, only doing one imputed dataset, although ideally you want to do several. In some cases one variable was entirely co-linear with others and MICE didn't impute those. Instead the mean value of the species was used as the imputation. 
 
-To reduce data leakage, imputation was done on train data, and the train data imputation rules were then used to impute the test data. 
-```{r mice, results='hide'}
+To reduce data leakage, imputation was done on train data, and the train data imputation rules were then used to impute the test data. Code not shown in markdown, see script if interested.
+```{r mice, results='hide', include=FALSE}
 # Imputation with the following parameters
 ## data[,-1] to exclude the ID in the imputation
 ## m = 1 means that only one imputed dataset is used
