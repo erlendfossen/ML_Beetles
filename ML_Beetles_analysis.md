@@ -670,7 +670,7 @@ confusionMatrix(p_test, factor(beetle_data_test_25_75$morphotype))
     Balanced Accuracy                0.9923
 
 ``` r
-## 3 wrong, else all correct
+## 1 wrong, else all correct
 ```
 
 Visualize the performance/predictions

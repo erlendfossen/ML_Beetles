@@ -390,7 +390,7 @@ confusionMatrix(p_train, factor(beetle_data_train_25_75$morphotype))
 #Test data
 p_test <- predict(model_rf_25_75, beetle_data_test_25_75)
 confusionMatrix(p_test, factor(beetle_data_test_25_75$morphotype))
-## 3 wrong, else all correct
+## 1 wrong, else all correct
 ```
 
 Visualize the performance/predictions
